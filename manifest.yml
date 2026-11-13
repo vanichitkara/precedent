@@ -1,0 +1,281 @@
+app:
+  id: ari:cloud:ecosystem::app/a53572ac-c92b-46a7-b125-e78dcfa1a1be
+  runtime:
+    name: nodejs22.x
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
+
+modules:
+  # ── Rovo ────────────────────────────────────────────────────────────────
+  rovo:agent:
+    - key: precedent-agent
+      name: Precedent
+      description: Answers "has this already been decided?" with sources, owners and
+        what superseded what.
+      prompt: resource:agent-prompt;agent.md
+      conversationStarters:
+        - Has this already been decided?
+        - Does this work item contradict any decisions?
+        - Which decisions are overdue for review?
+      actions:
+        - search-decisions
+        - get-decision
+        - check-against-decisions
+        - list-decision-debt
+        - record-decision
+        - supersede-decision
+      skills:
+        - check-against-decisions-skill
+
+  rovo:skill:
+    - key: check-against-decisions-skill
+      source:
+        dir: skills/check-against-decisions
+      dependencies:
+        tools:
+          - search-decisions
+          - check-against-decisions
+
+  rovo:mcp:
+    - key: precedent-mcp
+      name: Precedent
+      tools:
+        - search-decisions
+        - get-decision
+        - check-against-decisions
+        - list-decision-debt
+
+  action:
+    - key: search-decisions
+      name: Search decisions
+      function: action-search
+      actionVerb: GET
+      description: |
+        Search the team's decision ledger. Use whenever someone asks whether something
+        was decided, why a choice was made, or what the current decision on a topic is.
+      inputs:
+        query:
+          title: Query
+          type: string
+          required: true
+          description: Free-text topic, e.g. "database for orders service" or "API
+            versioning"
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Optional Jira project key to narrow results
+    - key: get-decision
+      name: Get decision
+      function: action-get
+      actionVerb: GET
+      description: Get one decision with rationale, owners, source link, supersede
+        chain and linked work.
+      inputs:
+        decisionId:
+          title: Decision ID
+          type: string
+          required: true
+          description: The decision ID, e.g. "DL-12"
+    - key: check-against-decisions
+      name: Check against decisions
+      function: action-check
+      actionVerb: GET
+      description: |
+        Check a proposal or work item against recorded decisions. Returns explicit rule breaks
+        (conflicts) and same-topic decisions (possiblyRelated) for you to judge. Call BEFORE
+        work that changes technology, architecture, process or policy.
+      inputs:
+        text:
+          title: Proposal text
+          type: string
+          required: false
+          description: What is being proposed. Required if issueKey is not given.
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: A Jira work item to check, e.g. "ORD-88"
+    - key: list-decision-debt
+      name: List decision debt
+      function: action-debt
+      actionVerb: GET
+      description: List decisions overdue for review, with questioned assumptions, or
+        superseded but still referenced by open work.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Optional Jira project key
+    - key: record-decision
+      name: Record decision
+      function: action-record
+      actionVerb: CREATE
+      description: |
+        Record a new decision the user has confirmed. Only call after showing the user the
+        exact statement, rationale and owners and getting a yes.
+      inputs:
+        title:
+          title: Title
+          type: string
+          required: true
+          description: Short title, e.g. "Stay on Postgres for transactional services"
+        statement:
+          title: Statement
+          type: string
+          required: true
+          description: The decision itself, one or two sentences
+        rationale:
+          title: Rationale
+          type: string
+          required: false
+          description: Why it was decided
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project the decision applies to
+        sourceUrl:
+          title: Source URL
+          type: string
+          required: false
+          description: Link to the page, work item or thread where it was decided
+    - key: supersede-decision
+      name: Supersede decision
+      function: action-supersede
+      actionVerb: UPDATE
+      description: Mark an existing decision as superseded by another one. Only after
+        the user confirms.
+      inputs:
+        decisionId:
+          title: Old decision ID
+          type: string
+          required: true
+          description: The decision being replaced
+        supersededById:
+          title: New decision ID
+          type: string
+          required: true
+          description: The decision that replaces it
+
+  # ── UI ──────────────────────────────────────────────────────────────────
+  jira:issuePanel:
+    - key: precedent-issue-panel
+      title: Decisions
+      icon: resource:icons;ledger.svg
+      resource: issue-panel
+      render: native
+      resolver:
+        function: resolver
+  jira:globalPage:
+    - key: precedent-dashboard
+      title: Precedent
+      icon: resource:icons;ledger.svg
+      resource: dashboard
+      render: native
+      resolver:
+        function: resolver
+  confluence:contentBylineItem:
+    - key: precedent-byline
+      title: Decisions
+      icon: resource:icons;ledger.svg
+      resource: byline
+      render: native
+      resolver:
+        function: resolver
+
+  # ── Events ──────────────────────────────────────────────────────────────
+  trigger:
+    - key: page-trigger
+      function: on-page
+      events:
+        - avi:confluence:created:page
+        - avi:confluence:updated:page
+    - key: issue-trigger
+      function: on-issue
+      events:
+        - avi:jira:created:issue
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true
+    - key: install-trigger
+      function: enqueue-migration
+      events:
+        - avi:forge:installed:app
+        - avi:forge:upgraded:app
+  scheduledTrigger:
+    - key: weekly-debt-schedule
+      function: weekly-debt
+      interval: week
+    # Forge allows one fiveMinute trigger: it queues pending migrations (minor versions fire
+    # no install event) and runs the page catch-up for dropped events.
+    - key: maintenance-schedule
+      function: maintenance-tick
+      interval: fiveMinute
+  consumer:
+    - key: migration-consumer
+      queue: schema-migration-queue
+      function: run-migration
+    - key: conflict-consumer
+      queue: conflict-check-queue
+      function: run-conflict-check
+    - key: page-sync-consumer
+      queue: page-sync-queue
+      function: run-page-sync
+
+  sql:
+    - key: main
+      engine: mysql
+
+  function:
+    - { key: resolver, handler: index.resolver }
+    - { key: action-search, handler: index.searchDecisionsAction }
+    - { key: action-get, handler: index.getDecisionAction }
+    - { key: action-check, handler: index.checkAgainstDecisionsAction }
+    - { key: action-debt, handler: index.listDecisionDebtAction }
+    - { key: action-record, handler: index.recordDecisionAction }
+    - { key: action-supersede, handler: index.supersedeDecisionAction }
+    - { key: on-page, handler: index.onPage }
+    - { key: on-issue, handler: index.onIssue }
+    - { key: enqueue-migration, handler: index.enqueueMigration }
+    - { key: run-migration, handler: index.runMigration, timeoutSeconds: 900 }
+    - {
+        key: run-conflict-check,
+        handler: index.runConflictCheck,
+        timeoutSeconds: 120
+      }
+    - { key: run-page-sync, handler: index.runPageSync }
+    - { key: maintenance-tick, handler: index.maintenanceTick, timeoutSeconds: 300 }
+    - { key: weekly-debt, handler: index.weeklyDebt }
+
+resources:
+  - key: issue-panel
+    path: src/frontend/issuePanel.tsx
+  - key: dashboard
+    path: src/frontend/dashboard.tsx
+  - key: byline
+    path: src/frontend/byline.tsx
+  - key: agent-prompt
+    path: prompts
+  - key: icons
+    path: static/icons
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:page:confluence
+    - read:confluence-content.all
+    - read:confluence-content.summary
+    # Teamwork Graph: one scope per object type the blast-radius query touches.
+    # Missing scopes do NOT error, results just come back empty. See src/twg/README.md.
+    - read:graph:page:confluence
+    - read:graph:issue:jira
+    - read:graph:user:atlassian
+    - read:graph:team:atlassian
+    - read:graph:goal:atlassian
+    - read:graph:pull-request:external
