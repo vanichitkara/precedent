@@ -4,6 +4,8 @@
 
 Built for **Codegeist 2026** · Category: **Apps for Software Teams** · Bonus prizes: **Best Agents**, **Best app with Atlassian MCP**, **Best Teamwork Graph integration**, **Best Marketplace app**.
 
+**Source:** [github.com/vanichitkara/precedent](https://github.com/vanichitkara/precedent) · MIT licensed
+
 ---
 
 ## For judges: setup and a 5-minute tour
@@ -12,14 +14,13 @@ Built for **Codegeist 2026** · Category: **Apps for Software Teams** · Bonus p
 
 **Installation link:** _TODO: add the production sharing link before submission._
 
-| You need | Why | Without it |
-|---|---|---|
-| **Jira Cloud** | Required. Precedent installs into Jira first. | — |
-| **Confluence Cloud**, connected to the same install | Decisions are captured from Confluence pages | Decisions can only be recorded through the agent |
-| **Rovo** on the site | The Precedent agent and the **Ask Precedent** button | Conflict flagging, the dashboard and MCP still work |
-| The installer is an **organization admin** | Atlassian requires org-admin rights to install apps that use Teamwork Graph scopes | Everything works except the **Blast radius** block |
+Your Codegeist demo site (`forge site provision`) has everything Precedent uses: Jira, Confluence, Rovo and the Teamwork Graph. Install from the link into **Jira**, then connect **Confluence** when prompted. No other configuration is needed.
 
-Install from the link into **Jira**, then connect **Confluence** when prompted. A free Forge demo site (`forge site provision`) includes Rovo.
+<details>
+<summary>Installing on a different site?</summary>
+
+Jira is required. Without Confluence, decisions can only be recorded through the agent. Without Rovo, the agent and **Ask Precedent** are unavailable, but flagging, the dashboard and MCP still work. The **Blast radius** block needs the installer to be an organization admin, because Atlassian requires that for apps with Teamwork Graph scopes.
+</details>
 
 **In a hurry?** Open **Apps → Precedent** in Jira and click **Load example decisions**. Then skip to step 2: four decisions that apply to every project are loaded, and **Remove examples** takes them out again.
 
@@ -33,7 +34,7 @@ A title prefix like `PAY:` or `[PAY]` scopes the page's decisions to Jira projec
 
 ### 2. See a conflict flagged (1 min)
 1. In any Jira project, create a work item: **"Migrate the orders service to MongoDB"**.
-2. Open it and look at the **Decisions** panel. Within about 10 seconds it warns: *Conflicts with DL-1*, quoting the clause that's broken.
+2. Open it and look at the **Decisions** panel. It shows *Checking this work item against team decisions…*, then, within a few seconds and without a reload, warns: *Conflicts with DL-1*, quoting the clause that's broken.
 3. Click **Yes, it conflicts** or **Not a conflict**. A dismissal is remembered.
 
 Adding a decision later also re-checks existing open work in that project automatically.
@@ -55,7 +56,7 @@ Click **Ask Precedent** in the panel, or open Rovo chat and **select the Precede
 
 Any MCP-compatible client works. The `skills/check-against-decisions/SKILL.md` file can be dropped into another agent as its instructions.
 
-### 5. Teamwork Graph blast radius (org admin only)
+### 5. Teamwork Graph blast radius (1 min)
 Create a team (app switcher → **Teams**) and add yourself, then reopen the work item. Under the warning, **Blast radius (Teamwork Graph)** lists:
 - the work in conflict
 - the owning teams
@@ -74,13 +75,13 @@ Open **Apps → Precedent**. The dashboard leads with how many work items broke 
 |---|---|
 | No warning on a work item | Wait up to 5 minutes: a catch-up job re-syncs any page whose event was missed. Or click **Re-check against decisions**. |
 | The agent answers without DL numbers | You're on the default Rovo agent. Select **Precedent**. |
-| No Blast radius block | The installer isn't an org admin, or a Teamwork Graph scope was withheld in admin settings |
+| No Blast radius block | Add yourself to a team and reopen the work item. On a non-demo site, the installer must be an org admin. |
 | `precedent` missing from `/mcp` | Add it with `--scope user`, then start a new `claude` session |
 
 ### Data, cost and permissions
 - **Runs on Atlassian:** no external egress. All data stays in Forge SQL on your site.
 - **No Forge LLM.** Conflict checks are rule-based, so a check costs nothing. Deeper judgement comes from the agent you're already using (Rovo or your MCP client).
-- **Respects permissions.** Decisions are captured as the app, but every surface (panels, dashboard, agent, MCP) shows only decisions whose source page or work item the viewer can open. Teamwork Graph results are filtered for the viewer too.
+- **Respects permissions.** Decisions are captured as the app, but every surface (panels, dashboard, agent, MCP) shows only decisions whose source page or work item the viewer can open. Related pages, Teamwork Graph results and the dashboard's impact numbers are filtered for the viewer too. Tested with two accounts: restricting a decision's page hides that decision from the second account everywhere.
 
 ---
 
@@ -88,14 +89,15 @@ Open **Apps → Precedent**. The dashboard leads with how many work items broke 
 
 | Piece | Where |
 |---|---|
-| **Capture:** Confluence `/decision` items are parsed from the page's ADF on publish or update and upserted by `localId`. A 5-minute catch-up job re-syncs pages whose events were dropped, using page versions. | `src/capture/` |
+| **Capture:** Confluence `/decision` items are parsed from the page's ADF on publish or update and upserted by `localId`, along with the pages it links to. A 5-minute catch-up job re-syncs pages whose events were dropped, using page versions. | `src/capture/` |
 | **Ledger:** decisions, links, assumptions and conflicts in Forge SQL. People-facing IDs (`DL-n`) come from a per-site counter, because TiDB auto-increment isn't sequential. | `src/db/` |
 | **Conflict check:** issue events queue an async check. Rules read each decision's explicit *no / never / not allowed / only / stay on* clauses, with technology categories and aliases (MongoDB is a document database). They flag work that breaks one and quote the clause. Same-topic decisions are returned to agents to judge. | `src/conflicts/` |
 | **Permissions:** `visibleTo()` keeps only decisions the viewer can open, with one batched Confluence check made as the user. It fails closed. | `src/permissions.ts` |
 | **Rovo agent, skill and actions:** search, get, check, debt, record, supersede. Every result carries a ready-to-paste `cite`. | `manifest.yml`, `src/actions.ts`, `prompts/`, `skills/` |
 | **MCP server (`rovo:mcp`):** exposes the four read actions to Rovo Studio and to external MCP clients | `manifest.yml` |
-| **Teamwork Graph:** one aliased curated-query call per decision (owners, contributors, teams, goals, PRs), as the viewer | `src/twg/` (read its README) |
-| **UI:** issue panel, Confluence byline, global dashboard (UI Kit) | `src/frontend/` |
+| **Teamwork Graph:** one aliased curated-query call per decision (owners, contributors, teams, goals, PRs, linked pages), as the viewer | `src/twg/` (read its README) |
+| **UI:** issue panel, Confluence byline, global dashboard with impact numbers, and a decision window for assumptions and superseding (UI Kit) | `src/frontend/` |
+| **Live updates (Forge Realtime):** when a background check finishes, it publishes a "reload" event, and an open issue panel refreshes without a page reload. The event carries no data: the panel re-fetches through its permission-checked resolver. If no event arrives, the panel polls briefly instead. | `src/conflicts/check.ts`, `src/frontend/issuePanel.tsx` |
 | **Background:** a 5-minute maintenance tick (pending migrations, page catch-up) and a weekly decision-debt job | `src/index.ts` |
 
 Why conflicts are checked in a trigger rather than by the agent: Rovo agents run from Jira Automation **can't call CREATE or UPDATE actions**, so they can't save a conflict.
@@ -133,6 +135,6 @@ Use `forge logs` while testing. Every agent and MCP action, visibility check and
 
 ## Known limitations
 - Rules only catch contradictions a decision states explicitly. "We prefer managed services" vs "self-host Kafka" isn't flagged automatically; the agent catches it when asked.
-- The Teamwork Graph needs an org-admin installer. On sites without Goals or a connected Git provider, those rows stay empty.
+- On sites without Goals or a connected Git provider, those blast-radius rows stay empty. Outside demo sites, the Teamwork Graph needs an org-admin installer.
 - "Contradictions caught" counts flags still on record: a flag that a later re-check clears (because the work item changed) isn't counted.
 - Assumptions are managed in the UI only; the agent can read decision debt but not edit assumptions.
