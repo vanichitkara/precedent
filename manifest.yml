@@ -47,6 +47,7 @@ modules:
         - get-decision
         - check-against-decisions
         - list-decision-debt
+        - record-decision
 
   action:
     - key: search-decisions
@@ -116,8 +117,9 @@ modules:
       function: action-record
       actionVerb: CREATE
       description: |
-        Record a new decision the user has confirmed. Only call after showing the user the
-        exact statement, rationale and owners and getting a yes.
+        Propose a new team decision. It is saved as "proposed" and binds no work until a
+        teammate accepts it in Precedent. Only call after showing the user the exact wording.
+        Pass issueKey when the decision came out of work on a Jira work item.
       inputs:
         title:
           title: Title
@@ -144,6 +146,11 @@ modules:
           type: string
           required: false
           description: Link to the page, work item or thread where it was decided
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Jira work item this decision came out of, e.g. ORD-12
     - key: supersede-decision
       name: Supersede decision
       function: action-supersede

@@ -96,6 +96,18 @@ resolver.define('decisionDetail', async ({ payload }) => {
   return { decision, assumptions, links, supersededBy, replacements };
 });
 
+/** A person makes an agent's proposal binding; from then on it flags conflicting work. */
+resolver.define('acceptDecision', async ({ payload, context }) => {
+  const { id } = payload as { id: string };
+  const decision = await visibleOrNull(await getDecision(id));
+  // Confluence proposals follow their page: they're accepted by marking the item decided there.
+  if (!decision || decision.status !== 'proposed' || decision.sourceType === 'confluence') return { ok: false };
+  await setStatus(decision.id, 'accepted');
+  console.log(`${decision.id} accepted by ${context.accountId ?? 'unknown'}`);
+  await recheckAfterChange(decision.projectKey, context.extension?.issue?.key);
+  return { ok: true };
+});
+
 resolver.define('addAssumption', async ({ payload }) => {
   const { id, text } = payload as { id: string; text: string };
   const decision = await visibleOrNull(await getDecision(id));

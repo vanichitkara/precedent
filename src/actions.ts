@@ -106,27 +106,40 @@ export async function listDecisionDebtAction(payload: ActionPayload) {
   };
 }
 
+/**
+ * Agents (Rovo chat, or a coding agent over MCP) can propose decisions but not make them binding:
+ * everything recorded here starts as `proposed`, which never flags work, until a person accepts it
+ * in Precedent.
+ */
 export async function recordDecisionAction(payload: ActionPayload, context: ActionContext) {
   logCall('record-decision', payload);
   const title = str(payload.title);
   const statement = str(payload.statement);
   if (!title || !statement) return { error: 'title and statement are required' };
+  // A work item named by the agent is an input, not proof of access: link it only if the caller can open it.
+  const named = str(payload.issueKey)?.toUpperCase();
+  const issueKey =
+    payload.context?.jira?.issueKey ??
+    (named && /^[A-Z][A-Z0-9]+-\d+$/.test(named) && (await asUserAccess.canSeeIssue(named).catch(() => false)) ? named : undefined);
   const d = await insertDecision({
     title,
     statement,
     rationale: str(payload.rationale) ?? null,
-    projectKey: str(payload.projectKey) ?? payload.context?.jira?.projectKey ?? null,
-    sourceType: payload.context?.jira?.issueKey ? 'jira' : 'manual',
-    sourceId: payload.context?.jira?.issueKey ?? null,
+    context: 'Proposed through an AI agent',
+    status: 'proposed',
+    projectKey: str(payload.projectKey)?.toUpperCase() ?? payload.context?.jira?.projectKey ?? issueKey?.split('-')[0] ?? null,
+    sourceType: issueKey ? 'jira' : 'manual',
+    sourceId: issueKey ?? null,
     sourceUrl: str(payload.sourceUrl) ?? payload.context?.confluence?.url ?? null,
     owners: context.principal ? [{ accountId: context.principal.accountId }] : [],
   });
   return {
     recorded: brief(d),
     // Agents filled the missing link with an invented URL; say plainly there isn't one.
-    message: d.sourceUrl
-      ? `Recorded as ${d.id}.`
-      : `Recorded as ${d.id} in the Precedent ledger. It has no source page, so there is no link: do not make one up.`,
+    message:
+      `Recorded as ${d.id} with status "proposed". It won't flag any work until a teammate accepts it ` +
+      `in Precedent (Apps → Precedent → Details → Accept).` +
+      (d.sourceUrl ? '' : ' It has no source page, so there is no link: do not make one up.'),
   };
 }
 

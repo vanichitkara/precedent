@@ -91,6 +91,25 @@ export const DecisionModal = ({ decisionId, onClose, onChanged }: { decisionId: 
             {error ? <SectionMessage appearance="error"><Text>{error}</Text></SectionMessage> : null}
             <DecisionSummary d={d} />
 
+            {d.status === 'proposed' ? (
+              <SectionMessage appearance="discovery" title="Proposed, not yet binding">
+                <Stack space="space.100">
+                  <Text>
+                    {d.sourceType === 'confluence'
+                      ? 'This decision is still undecided on its Confluence page. Mark it as decided there and it will start flagging conflicting work.'
+                      : `${d.context ?? 'Proposed'}. It won't flag any work until someone accepts it.`}
+                  </Text>
+                  {d.sourceType !== 'confluence' ? (
+                    <Inline>
+                      <Button appearance="primary" isDisabled={busy} onClick={() => act('acceptDecision', { id: d.id })}>
+                        {`Accept ${d.id}`}
+                      </Button>
+                    </Inline>
+                  ) : null}
+                </Stack>
+              </SectionMessage>
+            ) : null}
+
             {d.status === 'superseded' && detail.supersededBy ? (
               <SectionMessage appearance="information" title={`Superseded by ${detail.supersededBy.id}`}>
                 <Text>{`${detail.supersededBy.title}: ${detail.supersededBy.statement}`}</Text>

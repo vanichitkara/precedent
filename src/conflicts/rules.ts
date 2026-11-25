@@ -129,7 +129,8 @@ export function findRuleConflicts(proposal: string, decisions: Decision[]): Rule
   const terms = proposalTerms(proposal);
   const hits: RuleHit[] = [];
   for (const decision of decisions) {
-    if (decision.status === 'superseded') continue;
+    // Only decisions the team stands behind are rules: proposals and superseded ones aren't.
+    if (decision.status === 'superseded' || decision.status === 'proposed') continue;
     const permitted = permittedTerms(decision);
     for (const rule of extractRules(decision)) {
       let reason: string | null = null;

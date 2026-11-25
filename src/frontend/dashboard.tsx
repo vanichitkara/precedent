@@ -158,6 +158,22 @@ const App = () => {
           <Text>Create a Jira work item called "Migrate orders service to MongoDB" and open it: the Decisions panel flags it within a few seconds.</Text>
         </SectionMessage>
       ) : null}
+      {(() => {
+        const proposals = data.decisions.filter((d) => d.status === 'proposed' && d.sourceType !== 'confluence');
+        return proposals.length ? (
+          <SectionMessage appearance="discovery" title={`${proposals.length} ${proposals.length === 1 ? 'decision' : 'decisions'} proposed by AI agents`}>
+            <Stack space="space.100">
+              <Text>Proposals don't flag any work until someone on the team accepts them.</Text>
+              {proposals.map((d) => (
+                <Inline key={d.id} space="space.100" alignBlock="center">
+                  <Button spacing="compact" onClick={() => setOpenId(d.id)}>Review</Button>
+                  <Text>{`${d.id} · ${d.title}`}</Text>
+                </Inline>
+              ))}
+            </Stack>
+          </SectionMessage>
+        ) : null;
+      })()}
       <Text>{impactSentence(data.impact)}</Text>
       <Inline space="space.100" grow="fill">
         <Stat label="Decisions in force" value={data.decisions.filter((d) => d.status !== 'superseded').length} hint={`${data.impact.superseded} superseded`} />

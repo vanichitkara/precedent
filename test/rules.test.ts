@@ -62,6 +62,11 @@ describe('findRuleConflicts on the seed data', () => {
     expect(hit.reason).toContain('stay on PostgreSQL');
   });
 
+  it('ignores proposed decisions until someone accepts them', () => {
+    const proposed = ledger.map((d, i) => (i === 0 ? { ...d, status: 'proposed' as const } : d));
+    expect(flagged('Migrate orders service to MongoDB', '', proposed)).toEqual([]);
+  });
+
   it('ignores superseded decisions', () => {
     const superseded = ledger.map((d, i) => (i === 0 ? { ...d, status: 'superseded' as const } : d));
     expect(flagged('Migrate orders service to MongoDB', '', superseded)).toEqual([]);

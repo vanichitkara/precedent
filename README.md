@@ -43,7 +43,7 @@ Adding a decision later also re-checks existing open work in that project automa
 Click **Ask Precedent** in the panel, or open Rovo chat and **select the Precedent agent**. New chats start on the default Rovo agent, which doesn't use the ledger. Try:
 - *Has the team decided which database to use?* → cites DL-1 with a link
 - *Did we decide which CI provider to use?* → says nothing is recorded; it doesn't invent one
-- *Record a decision: we use Sentry for error tracking.* → shows the wording and asks before saving
+- *Record a decision: we use Sentry for error tracking.* → shows the wording, asks before saving, and saves it as a **proposal** for a teammate to accept
 
 ### 4. Use it from a coding agent over MCP (2 min)
 1. In **Atlassian Administration** → Apps → Sites → *your site* → **Connected apps** → **Precedent**, turn on its tools. External MCP access is off by default.
@@ -53,6 +53,7 @@ Click **Ask Precedent** in the panel, or open Rovo chat and **select the Precede
    ```
 3. Start `claude`, run `/mcp`, choose **precedent** → **Authenticate**, and approve your site.
 4. Ask: *"I want to add a new orders service on MongoDB. Check with precedent first."* It calls `check-against-decisions` and pushes back, citing DL-1.
+5. Let the agent propose a decision: *"We've agreed to cache sessions in Redis. Record that with precedent."* It shows the wording, asks, then calls `record-decision`. The decision lands as **proposed**: open **Apps → Precedent**, click **Review**, then **Accept**. From then on it flags conflicting work for everyone, including other agents.
 
 Any MCP-compatible client works. The `skills/check-against-decisions/SKILL.md` file can be dropped into another agent as its instructions.
 
@@ -94,7 +95,7 @@ Open **Apps → Precedent**. The dashboard leads with how many work items broke 
 | **Conflict check:** issue events queue an async check. Rules read each decision's explicit *no / never / not allowed / only / stay on* clauses, with technology categories and aliases (MongoDB is a document database). They flag work that breaks one and quote the clause. Same-topic decisions are returned to agents to judge. | `src/conflicts/` |
 | **Permissions:** `visibleTo()` keeps only decisions the viewer can open, with one batched Confluence check made as the user. It fails closed. | `src/permissions.ts` |
 | **Rovo agent, skill and actions:** search, get, check, debt, record, supersede. Every result carries a ready-to-paste `cite`. | `manifest.yml`, `src/actions.ts`, `prompts/`, `skills/` |
-| **MCP server (`rovo:mcp`):** exposes the four read actions to Rovo Studio and to external MCP clients | `manifest.yml` |
+| **MCP server (`rovo:mcp`):** exposes search, get, check, debt and `record-decision` to Rovo Studio and to external MCP clients. Agents can propose decisions but not make them binding: anything an agent records starts as *proposed*, never flags work, and becomes a rule only when a person accepts it. | `manifest.yml`, `src/actions.ts` |
 | **Teamwork Graph:** one aliased curated-query call per decision (owners, contributors, teams, goals, PRs, linked pages), as the viewer | `src/twg/` (read its README) |
 | **UI:** issue panel, Confluence byline, global dashboard with impact numbers, and a decision window for assumptions and superseding (UI Kit) | `src/frontend/` |
 | **Live updates (Forge Realtime):** when a background check finishes, it publishes a "reload" event, and an open issue panel refreshes without a page reload. The event carries no data: the panel re-fetches through its permission-checked resolver. If no event arrives, the panel polls briefly instead. | `src/conflicts/check.ts`, `src/frontend/issuePanel.tsx` |
